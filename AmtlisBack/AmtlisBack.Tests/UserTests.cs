@@ -1,10 +1,25 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using Xunit;
+using AmtlisBack.Models;
 
 namespace AmtlisBack.Tests
 {
-    internal class UserTests
+    public class UserTests
     {
+        [Fact]
+        public void User_Initialization_SetsPropertiesCorrectly()
+        {
+            var user = new User
+            {
+                Id = 1,
+                Username = "TestUser",
+                Email = "test@example.com"
+            };
+
+            Assert.Equal(1, user.Id);
+            Assert.Equal("TestUser", user.Username);
+            Assert.Equal("test@example.com", user.Email);
+            Assert.True((DateTime.UtcNow - user.CreatedAt).TotalSeconds < 1);
+        }
     }
 }
