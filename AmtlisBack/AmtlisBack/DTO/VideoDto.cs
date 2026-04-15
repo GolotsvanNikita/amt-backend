@@ -1,0 +1,12 @@
+﻿namespace AmtlisBack.Models
+{
+    public class VideoDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string ChannelName { get; set; } = string.Empty;
+        public string ThumbnailUrl { get; set; } = string.Empty;
+        public string Views { get; set; } = string.Empty;
+        public string PublishedAt { get; set; } = string.Empty;
+    }
+}
