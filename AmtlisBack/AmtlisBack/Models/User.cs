@@ -9,5 +9,12 @@ namespace AmtlisBack.Models
         public string Email { get; set; } = string.Empty;
         public string PasswordHash { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public string Username { get; set; } = string.Empty;
+        public string AvatarUrl { get; set; } = "/ava.png";
+        public string BannerUrl { get; set; } = "/backimage.jpg";
+        public int SubscribersCount { get; set; } = 0;
+
+        public ICollection<WatchHistory> WatchHistories { get; set; } = new List<WatchHistory>();
     }
 }

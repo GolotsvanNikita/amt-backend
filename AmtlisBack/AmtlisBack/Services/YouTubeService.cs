@@ -45,21 +45,52 @@ namespace AmtlisBack.Services
             foreach (var item in items.EnumerateArray())
             {
                 var snippet = item.GetProperty("snippet");
-                var statistics = item.GetProperty("statistics");
-                string viewsCount = statistics.TryGetProperty("viewCount", out var vCount) ? vCount.GetString() : "0";
+                var statistics = item.TryGetProperty("statistics", out var stats) ? stats : default;
+
+                string viewsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("viewCount", out var vCount)
+                    ? FormatViews(vCount.GetString())
+                    : "0";
+
+                if (viewsCount == "0")
+                {
+                    continue;
+                }
+
+                var thumbnails = snippet.GetProperty("thumbnails");
+
+                bool hasHigh = thumbnails.TryGetProperty("high", out var high);
+                bool hasMedium = thumbnails.TryGetProperty("medium", out var med);
+
+                if (!hasHigh && !hasMedium)
+                {
+                    continue;
+                }
+
+                string? thumbUrl = hasHigh
+                    ? high.GetProperty("url").GetString()
+                    : med.GetProperty("url").GetString();
 
                 videos.Add(new VideoDto
                 {
                     Id = item.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(),
                     Title = snippet.GetProperty("title").GetString() ?? "Unknown Title",
                     ChannelName = snippet.GetProperty("channelTitle").GetString() ?? "Unknown Channel",
-                    ThumbnailUrl = snippet.GetProperty("thumbnails").GetProperty("medium").GetProperty("url").GetString() ?? "",
-                    Views = viewsCount,
+                    ThumbnailUrl = thumbUrl ?? "",
+                    Views = viewsCount + " views",
                     PublishedAt = snippet.GetProperty("publishedAt").GetDateTime().ToString("MMM dd, yyyy")
                 });
             }
 
             return new YouTubeResponse { Videos = videos, NextPageToken = nextToken };
+        }
+        private string FormatViews(string views)
+        {
+            if (long.TryParse(views, out long count))
+            {
+                if (count >= 1000000) return (count / 1000000D).ToString("0.#") + "M";
+                if (count >= 1000) return (count / 1000D).ToString("0.#") + "K";
+            }
+            return views;
         }
     }
 }

@@ -1,21 +1,38 @@
 using AmtlisBack.Data;
 using AmtlisBack.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend", policy =>
+    options.AddPolicy("AllowAll", policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "https://vercel.app")
-              .AllowAnyHeader()
+        policy.AllowAnyOrigin()
               .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowAnyHeader();
     });
 });
 
 builder.Services.AddControllers();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+            ValidAudience = builder.Configuration["JwtSettings:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:SecretKey"]))
+        };
+    });
 
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 
@@ -28,9 +45,27 @@ builder.Services.AddScoped<IYouTubeService, YouTubeService>();
 
 var app = builder.Build();
 
-app.UseCors("AllowFrontend");
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AmtlisBack.Data.AppDbContext>();
+        context.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Migration error: {ex.Message}");
+    }
+}
+
+app.UseCors("AllowAll");
 
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
+
+app.UseAuthentication();
 
 app.UseAuthorization();
 
