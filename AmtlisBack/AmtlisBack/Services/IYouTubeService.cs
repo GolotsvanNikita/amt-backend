@@ -6,10 +6,12 @@ namespace AmtlisBack.Services
     {
         public List<VideoDto> Videos { get; set; } = new();
         public string NextPageToken { get; set; } = string.Empty;
+
     }
 
     public interface IYouTubeService
     {
         Task<YouTubeResponse> GetVideosAsync(int maxResults, string pageToken = "", string categoryId = "");
+        Task<YouTubeResponse> GetShortsAsync(int maxResults);
     }
 }

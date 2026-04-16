@@ -8,5 +8,7 @@
         public string ThumbnailUrl { get; set; } = string.Empty;
         public string Views { get; set; } = string.Empty;
         public string PublishedAt { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Likes { get; set; } = "0";
     }
 }
