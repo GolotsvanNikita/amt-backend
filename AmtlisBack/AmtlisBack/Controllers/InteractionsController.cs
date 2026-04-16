@@ -1,5 +1,6 @@
 ﻿using AmtlisBack.Data;
 using AmtlisBack.Models;
+using AmtlisBack.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,32 +13,56 @@ namespace AmtlisBack.Controllers
     public class InteractionsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IYouTubeService _youTubeService;
 
-        public InteractionsController(AppDbContext context)
+        public InteractionsController(AppDbContext context, IYouTubeService youTubeService)
         {
             _context = context;
+            _youTubeService = youTubeService;
         }
 
         [HttpGet("video/{videoId}")]
-        public async Task<IActionResult> GetVideoData(string videoId)
+        public async Task<IActionResult> GetVideoData(string videoId, [FromQuery] int page = 1, [FromQuery] int limit = 10)
         {
-            var comments = await _context.Comments
+            var commentsDb = await _context.Comments
                 .Include(c => c.User)
                 .Where(c => c.VideoId == videoId)
                 .OrderByDescending(c => c.CreatedAt)
-                .Select(c => new {
-                    id = c.Id,
-                    text = c.Text,
-                    time = c.CreatedAt.ToString("MMM dd, yyyy"),
-                    parentId = c.ParentId,
-                    name = c.User != null ? c.User.Name : "User",
-                    avatar = c.User != null ? c.User.AvatarUrl : "/ava.png"
-                })
                 .ToListAsync();
+
+            var localComments = commentsDb.Select(c => new CommentDto
+            {
+                Id = "local_" + c.Id.ToString(),
+                Text = c.Text,
+                Time = c.CreatedAt.ToString("MMM dd, yyyy"),
+                ParentId = c.ParentId != null ? "local_" + c.ParentId.ToString() : null,
+                Name = c.User != null ? c.User.Name : "User",
+                Avatar = c.User != null ? c.User.AvatarUrl : "/ava.png",
+                Replies = new List<CommentDto>()
+            }).ToList();
+
+            var topLevelLocal = localComments.Where(c => c.ParentId == null).ToList();
+            foreach (var top in topLevelLocal)
+            {
+                top.Replies = localComments.Where(c => c.ParentId == top.Id).ToList();
+            }
+
+            var ytComments = await _youTubeService.GetVideoCommentsAsync(videoId, 50);
+
+            var allComments = topLevelLocal.Concat(ytComments).ToList();
+
+            var pagedComments = allComments.Skip((page - 1) * limit).Take(limit).ToList();
+            bool hasMore = (page * limit) < allComments.Count;
 
             var likesCount = await _context.VideoLikes.CountAsync(l => l.VideoId == videoId);
 
-            return Ok(new { comments, likesCount });
+            return Ok(new
+            {
+                comments = pagedComments,
+                likesCount = likesCount,
+                hasMoreComments = hasMore,
+                page = page
+            });
         }
 
         [Authorize]

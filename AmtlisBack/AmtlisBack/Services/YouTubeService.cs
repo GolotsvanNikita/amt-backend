@@ -162,5 +162,52 @@ namespace AmtlisBack.Services
 
             return new YouTubeResponse { Videos = videos };
         }
+
+        public async Task<List<CommentDto>> GetVideoCommentsAsync(string videoId, int maxResults = 20)
+        {
+            var url = $"https://www.googleapis.com/youtube/v3/commentThreads?part=snippet,replies&videoId={videoId}&maxResults={maxResults}&key={_apiKey}";
+            var response = await _httpClient.GetAsync(url);
+            var comments = new List<CommentDto>();
+
+            if (!response.IsSuccessStatusCode) return comments;
+
+            var jsonString = await response.Content.ReadAsStringAsync();
+            using var document = JsonDocument.Parse(jsonString);
+            if (!document.RootElement.TryGetProperty("items", out var items)) return comments;
+
+            foreach (var item in items.EnumerateArray())
+            {
+                var topLevel = item.GetProperty("snippet").GetProperty("topLevelComment").GetProperty("snippet");
+
+                var comment = new CommentDto
+                {
+                    Id = item.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(),
+                    Name = topLevel.TryGetProperty("authorDisplayName", out var author) ? author.GetString() ?? "Unknown" : "Unknown",
+                    Avatar = topLevel.TryGetProperty("authorProfileImageUrl", out var avatar) ? avatar.GetString() ?? "/ava.png" : "/ava.png",
+                    Text = topLevel.TryGetProperty("textOriginal", out var text) ? text.GetString() ?? "" : "",
+                    Time = topLevel.TryGetProperty("publishedAt", out var pub) ? pub.GetDateTime().ToString("MMM dd, yyyy") : "Unknown",
+                    Replies = []
+                };
+
+                if (item.TryGetProperty("replies", out var repliesProp) && repliesProp.TryGetProperty("comments", out var commentsArray))
+                {
+                    foreach (var replyItem in commentsArray.EnumerateArray())
+                    {
+                        var replySnippet = replyItem.GetProperty("snippet");
+                        comment.Replies.Add(new CommentDto
+                        {
+                            Id = replyItem.GetProperty("id").GetString() ?? Guid.NewGuid().ToString(),
+                            Name = replySnippet.TryGetProperty("authorDisplayName", out var rAuthor) ? rAuthor.GetString() ?? "Unknown" : "Unknown",
+                            Avatar = replySnippet.TryGetProperty("authorProfileImageUrl", out var rAvatar) ? rAvatar.GetString() ?? "/ava.png" : "/ava.png",
+                            Text = replySnippet.TryGetProperty("textOriginal", out var rText) ? rText.GetString() ?? "" : "",
+                            Time = replySnippet.TryGetProperty("publishedAt", out var rPub) ? rPub.GetDateTime().ToString("MMM dd, yyyy") : "Unknown",
+                            ParentId = comment.Id
+                        });
+                    }
+                }
+                comments.Add(comment);
+            }
+            return comments;
+        }
     }
 }

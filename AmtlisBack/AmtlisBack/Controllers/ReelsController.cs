@@ -29,11 +29,11 @@ namespace AmtlisBack.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetReels()
+        public async Task<IActionResult> GetReels([FromQuery] int page = 1, [FromQuery] int limit = 5)
         {
-            var result = await _youTubeService.GetShortsAsync(15);
+            var result = await _youTubeService.GetShortsAsync(50);
 
-            var reels = result.Videos.Select(v => new
+            var allReels = result.Videos.Select(v => new
             {
                 id = v.Id,
                 title = v.Title,
@@ -54,9 +54,18 @@ namespace AmtlisBack.Controllers
                 isSubscribed = false,
                 layoutType = GetRandomLayout(),
                 comments = Array.Empty<object>()
-            });
+            }).ToList();
 
-            return Ok(reels);
+
+            var pagedReels = allReels.Skip((page - 1) * limit).Take(limit).ToList();
+            bool hasMore = (page * limit) < allReels.Count;
+
+            return Ok(new
+            {
+                reels = pagedReels,
+                hasMore = hasMore,
+                page = page
+            });
         }
 
         private string GetRandomLayout()

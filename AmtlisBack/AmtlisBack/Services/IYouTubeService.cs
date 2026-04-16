@@ -13,5 +13,6 @@ namespace AmtlisBack.Services
     {
         Task<YouTubeResponse> GetVideosAsync(int maxResults, string pageToken = "", string categoryId = "");
         Task<YouTubeResponse> GetShortsAsync(int maxResults);
+        Task<List<CommentDto>> GetVideoCommentsAsync(string videoId, int maxResults = 20);
     }
 }

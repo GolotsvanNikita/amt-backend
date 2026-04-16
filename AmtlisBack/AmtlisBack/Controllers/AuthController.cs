@@ -1,7 +1,12 @@
 ﻿using AmtlisBack.Data;
 using AmtlisBack.Models;
 using AmtlisBack.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
 
 namespace AmtlisBack.Controllers
 {
@@ -90,6 +95,47 @@ namespace AmtlisBack.Controllers
                 },
                 token = token
             });
+        }
+
+        [HttpGet("{provider}")]
+        public IActionResult ExternalLogin(string provider)
+        {
+            var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Auth", new { provider });
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
+
+            return Challenge(properties, provider);
+        }
+
+        [HttpGet("{provider}/callback")]
+        public async Task<IActionResult> ExternalLoginCallback(string provider)
+        {
+            var authenticateResult = await HttpContext.AuthenticateAsync("ExternalCookie");
+            if (!authenticateResult.Succeeded) return BadRequest("Error authenticating with external provider.");
+
+            var claims = authenticateResult.Principal.Identities.FirstOrDefault()?.Claims;
+            var email = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+            var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+
+            if (email == null) return BadRequest("Email not found.");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+            if (user == null)
+            {
+                user = new User
+                {
+                    Email = email,
+                    Name = name ?? "User",
+                };
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+            }
+
+            var token = _jwtTokenService.GenerateToken(user);
+
+            await HttpContext.SignOutAsync("ExternalCookie");
+
+            var frontendUrl = $"http://amt-frontend-three.vercel.app/oauth-success?token={token}";
+            return Redirect(frontendUrl);
         }
     }
 }
