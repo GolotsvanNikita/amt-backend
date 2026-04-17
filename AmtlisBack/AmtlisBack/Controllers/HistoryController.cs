@@ -51,13 +51,19 @@ namespace AmtlisBack.Controllers
             if (userIdClaim == null) return Unauthorized();
             int userId = int.Parse(userIdClaim.Value);
 
-            var history = await _context.WatchHistories
+            var rawHistory = await _context.WatchHistories
                 .Where(h => h.UserId == userId)
                 .OrderByDescending(h => h.WatchedAt)
-                .Take(4)
+                .Take(30)
                 .ToListAsync();
 
-            return Ok(history);
+            var distinctHistory = rawHistory
+                .GroupBy(h => h.VideoId)
+                .Select(g => g.First())
+                .Take(4)
+                .ToList();
+
+            return Ok(distinctHistory);
         }
     }
 }

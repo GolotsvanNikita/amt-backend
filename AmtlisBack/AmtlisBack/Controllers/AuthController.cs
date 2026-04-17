@@ -2,10 +2,11 @@
 using AmtlisBack.Models;
 using AmtlisBack.Services;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Buffers.Text;
+using System.Security.Claims;
 using System.Security.Claims;
 
 namespace AmtlisBack.Controllers
@@ -103,7 +104,8 @@ namespace AmtlisBack.Controllers
             var redirectUrl = Url.Action(nameof(ExternalLoginCallback), "Auth", new { provider });
             var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
 
-            return Challenge(properties, provider);
+            string scheme = char.ToUpper(provider[0]) + provider.Substring(1).ToLower();
+            return Challenge(properties, scheme);
         }
 
         [HttpGet("{provider}/callback")]
@@ -118,13 +120,18 @@ namespace AmtlisBack.Controllers
 
             if (email == null) return BadRequest("Email not found.");
 
+            string emailPrefix = email.Split('@')[0];
+
+            string finalName = string.IsNullOrWhiteSpace(name) ? emailPrefix : name;
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
             if (user == null)
             {
                 user = new User
                 {
                     Email = email,
-                    Name = name ?? "User",
+                    Name = finalName,
+                    Username = "@" + emailPrefix
                 };
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
@@ -134,7 +141,7 @@ namespace AmtlisBack.Controllers
 
             await HttpContext.SignOutAsync("ExternalCookie");
 
-            var frontendUrl = $"http://amt-frontend-three.vercel.app/oauth-success?token={token}";
+            var frontendUrl = $"https://amt-frontend-three.vercel.app/?token={token}";
             return Redirect(frontendUrl);
         }
     }

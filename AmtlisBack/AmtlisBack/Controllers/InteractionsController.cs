@@ -98,7 +98,13 @@ namespace AmtlisBack.Controllers
             }
             else
             {
-                _context.Subscriptions.Add(new ChannelSubscription { UserId = userId, ChannelName = req.ChannelName });
+                _context.Subscriptions.Add(new ChannelSubscription
+                { 
+                    UserId = userId,
+                    ChannelName = req.ChannelName,
+                    ChannelId = req.ChannelId,
+                    AvatarUrl = req.AvatarUrl
+                });
             }
 
             await _context.SaveChangesAsync();
@@ -126,6 +132,11 @@ namespace AmtlisBack.Controllers
         }
     }
 
-    public class SubscribeRequest { public string ChannelName { get; set; } = string.Empty; }
+    public class SubscribeRequest
+    {
+        public string ChannelName { get; set; } = string.Empty;
+        public string ChannelId { get; set; } = string.Empty;
+        public string AvatarUrl { get; set; } = "/ava.png";
+    }
     public class CommentRequest { public string Text { get; set; } = string.Empty; public int? ParentId { get; set; } }
 }

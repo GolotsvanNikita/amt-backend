@@ -15,6 +15,9 @@ namespace AmtlisBack.Models
         public string BannerUrl { get; set; } = "/backimage.jpg";
         public int SubscribersCount { get; set; } = 0;
 
+        public string About { get; set; } = string.Empty;
+        public string Color { get; set; } = "#B26E6E";
+
         public ICollection<WatchHistory> WatchHistories { get; set; } = [];
     }
 }

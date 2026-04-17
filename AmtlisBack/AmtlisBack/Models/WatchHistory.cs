@@ -14,6 +14,7 @@ namespace AmtlisBack.Models
 
         public string Title { get; set; } = string.Empty;
         public string ThumbnailUrl { get; set; } = string.Empty;
+        public string AvatarUrl { get; set; } = "/ava.png";
         public string ChannelName { get; set; } = string.Empty;
 
         public DateTime WatchedAt { get; set; } = DateTime.UtcNow;

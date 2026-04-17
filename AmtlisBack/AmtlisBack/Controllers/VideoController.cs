@@ -35,5 +35,14 @@ namespace AmtlisBack.Controllers
             var result = await _youTubeService.GetVideosAsync(12, pageToken);
             return Ok(result);
         }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] string q, [FromQuery] string pageToken = "")
+        {
+            if (string.IsNullOrWhiteSpace(q)) return BadRequest("Query is required");
+
+            var result = await _youTubeService.SearchVideosAsync(q, 15, pageToken);
+            return Ok(result);
+        }
     }
 }

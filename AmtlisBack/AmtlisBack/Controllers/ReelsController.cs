@@ -36,11 +36,12 @@ namespace AmtlisBack.Controllers
             var allReels = result.Videos.Select(v => new
             {
                 id = v.Id,
+                channelId = v.ChannelId,
                 title = v.Title,
                 videoUrl = v.Id,
                 imageUrl = v.ThumbnailUrl,
                 posterUrl = v.ThumbnailUrl,
-                avatarUrl = "/ava.png",
+                avatarUrl = v.ChannelAvatarUrl,
                 categorySlug = "all",
                 views = v.Views,
                 time = v.PublishedAt,
@@ -53,6 +54,7 @@ namespace AmtlisBack.Controllers
                 remix = new Random().Next(0, 100),
                 isSubscribed = false,
                 layoutType = GetRandomLayout(),
+                commentsCount = v.CommentsCount,
                 comments = Array.Empty<object>()
             }).ToList();
 
