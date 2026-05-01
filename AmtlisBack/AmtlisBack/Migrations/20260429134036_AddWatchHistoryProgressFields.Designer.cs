@@ -4,6 +4,7 @@ using AmtlisBack.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AmtlisBack.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260429134036_AddWatchHistoryProgressFields")]
+    partial class AddWatchHistoryProgressFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -94,9 +97,6 @@ namespace AmtlisBack.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("IsReel")
-                        .HasColumnType("bit");
 
                     b.Property<string>("ThumbnailUrl")
                         .IsRequired()
@@ -214,10 +214,6 @@ namespace AmtlisBack.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ChannelId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("ChannelName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -230,10 +226,6 @@ namespace AmtlisBack.Migrations
 
                     b.Property<int>("LastPositionSeconds")
                         .HasColumnType("int");
-
-                    b.Property<string>("LikesCount")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("ProgressPercent")
                         .HasColumnType("int");
@@ -250,10 +242,6 @@ namespace AmtlisBack.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("VideoId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ViewsCount")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

@@ -19,6 +19,15 @@ namespace AmtlisBack.Models
 
         public DateTime WatchedAt { get; set; } = DateTime.UtcNow;
 
+        public int DurationSeconds { get; set; }
+        public int LastPositionSeconds { get; set; }
+        public int ProgressPercent { get; set; }
+        public bool IsFinished { get; set; }
+
+        public string ChannelId { get; set; } = string.Empty;
+        public string ViewsCount { get; set; } = "0";
+        public string LikesCount { get; set; } = "0";
+
         public User? User { get; set; }
     }
 }

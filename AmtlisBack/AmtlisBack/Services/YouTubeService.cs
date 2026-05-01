@@ -14,65 +14,94 @@ namespace AmtlisBack.Services
             _apiKey = configuration["YouTubeApi:ApiKey"];
         }
 
+        private string FormatViews(string views)
+        {
+            if (long.TryParse(views, out long count))
+            {
+                if (count >= 1000000) return (count / 1000000D).ToString("0.#") + "M";
+                if (count >= 1000) return (count / 1000D).ToString("0.#") + "K";
+            }
+            return views;
+        }
+
+        private async Task AttachAvatarsAsync(List<VideoDto> videos)
+        {
+            if (!videos.Any()) return;
+
+            var uniqueChannelIds = videos.Select(v => v.ChannelId).Where(id => !string.IsNullOrEmpty(id)).Distinct().Take(50).ToList();
+            if (!uniqueChannelIds.Any()) return;
+
+            var channelsString = string.Join(",", uniqueChannelIds);
+            var channelsUrl = $"https://www.googleapis.com/youtube/v3/channels?part=snippet&id={channelsString}&key={_apiKey}";
+            var channelsResponse = await _httpClient.GetAsync(channelsUrl);
+
+            if (channelsResponse.IsSuccessStatusCode)
+            {
+                var channelsJson = await channelsResponse.Content.ReadAsStringAsync();
+                using var channelsDoc = JsonDocument.Parse(channelsJson);
+
+                if (channelsDoc.RootElement.TryGetProperty("items", out var channelItems))
+                {
+                    var avatarDict = new Dictionary<string, string>();
+
+                    foreach (var cItem in channelItems.EnumerateArray())
+                    {
+                        var cId = cItem.GetProperty("id").GetString()!;
+                        var thumbnails = cItem.GetProperty("snippet").GetProperty("thumbnails");
+
+                        string avatar = thumbnails.TryGetProperty("default", out var def)
+                            ? def.GetProperty("url").GetString()!
+                            : "/ava.png";
+
+                        avatarDict[cId] = avatar;
+                    }
+
+                    foreach (var video in videos)
+                    {
+                        if (avatarDict.TryGetValue(video.ChannelId, out var avatar))
+                        {
+                            video.ChannelAvatarUrl = avatar;
+                        }
+                    }
+                }
+            }
+        }
+
         public async Task<YouTubeResponse> GetVideosAsync(int maxResults, string pageToken = "", string categoryId = "")
         {
             var url = $"https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&chart=mostPopular&maxResults={maxResults}&regionCode=US&key={_apiKey}";
 
-            if (!string.IsNullOrEmpty(pageToken))
-            {
-                url += $"&pageToken={pageToken}";
-            }
-
-            if (!string.IsNullOrEmpty(categoryId))
-            {
-                url += $"&videoCategoryId={categoryId}";
-            }
+            if (!string.IsNullOrEmpty(pageToken)) url += $"&pageToken={pageToken}";
+            if (!string.IsNullOrEmpty(categoryId)) url += $"&videoCategoryId={categoryId}";
 
             var response = await _httpClient.GetAsync(url);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                return new YouTubeResponse();
-            }
+            if (!response.IsSuccessStatusCode) return new YouTubeResponse();
 
             var jsonString = await response.Content.ReadAsStringAsync();
             using var document = JsonDocument.Parse(jsonString);
             var items = document.RootElement.GetProperty("items");
 
             string nextToken = document.RootElement.TryGetProperty("nextPageToken", out var tokenProp) ? tokenProp.GetString() ?? "" : "";
-
             var videos = new List<VideoDto>();
+
             foreach (var item in items.EnumerateArray())
             {
                 var snippet = item.GetProperty("snippet");
                 var statistics = item.TryGetProperty("statistics", out var stats) ? stats : default;
 
-                string viewsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("viewCount", out var vCount)
-                    ? FormatViews(vCount.GetString())
-                    : "0";
+                string viewsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("viewCount", out var vCount) ? FormatViews(vCount.GetString()!) : "0";
+                string likesCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("likeCount", out var lCount) ? FormatViews(lCount.GetString()!) : "0";
 
-                string likesCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("likeCount", out var lCount)
-                    ? FormatViews(lCount.GetString()!)
-                    : "0";
-
-                if (viewsCount == "0")
-                {
-                    continue;
-                }
+                if (viewsCount == "0") continue;
 
                 var thumbnails = snippet.GetProperty("thumbnails");
-
                 bool hasHigh = thumbnails.TryGetProperty("high", out var high);
                 bool hasMedium = thumbnails.TryGetProperty("medium", out var med);
 
-                if (!hasHigh && !hasMedium)
-                {
-                    continue;
-                }
+                if (!hasHigh && !hasMedium) continue;
 
-                string? thumbUrl = hasHigh
-                    ? high.GetProperty("url").GetString()
-                    : med.GetProperty("url").GetString();
+                string? thumbUrl = hasHigh ? high.GetProperty("url").GetString() : med.GetProperty("url").GetString();
 
                 videos.Add(new VideoDto
                 {
@@ -84,20 +113,12 @@ namespace AmtlisBack.Services
                     Views = viewsCount + " views",
                     Likes = likesCount,
                     PublishedAt = snippet.GetProperty("publishedAt").GetDateTime().ToString("MMM dd, yyyy"),
-                    Description = snippet.TryGetProperty("description", out JsonElement desc) ? desc.GetString() : ""
+                    Description = snippet.TryGetProperty("description", out JsonElement desc) ? desc.GetString() ?? "" : ""
                 });
             }
 
+            await AttachAvatarsAsync(videos);
             return new YouTubeResponse { Videos = videos, NextPageToken = nextToken };
-        }
-        private string FormatViews(string views)
-        {
-            if (long.TryParse(views, out long count))
-            {
-                if (count >= 1000000) return (count / 1000000D).ToString("0.#") + "M";
-                if (count >= 1000) return (count / 1000D).ToString("0.#") + "K";
-            }
-            return views;
         }
 
         public async Task<YouTubeResponse> GetShortsAsync(int maxResults)
@@ -136,16 +157,11 @@ namespace AmtlisBack.Services
                 var snippet = item.GetProperty("snippet");
                 var statistics = item.TryGetProperty("statistics", out var stats) ? stats : default;
 
-                string viewsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("viewCount", out var vCount) ? FormatViews(vCount.GetString()) : "0";
+                string viewsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("viewCount", out var vCount) ? FormatViews(vCount.GetString()!) : "0";
                 if (viewsCount == "0") continue;
 
-                string likesCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("likeCount", out var lCount)
-                    ? FormatViews(lCount.GetString()!)
-                    : "0";
-
-                string commentsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("commentCount", out var cCount)
-                    ? FormatViews(cCount.GetString()!)
-                    : "0";
+                string likesCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("likeCount", out var lCount) ? FormatViews(lCount.GetString()!) : "0";
+                string commentsCount = statistics.ValueKind != JsonValueKind.Undefined && statistics.TryGetProperty("commentCount", out var cCount) ? FormatViews(cCount.GetString()!) : "0";
 
                 var thumbnails = snippet.GetProperty("thumbnails");
                 bool hasHigh = thumbnails.TryGetProperty("high", out var high);
@@ -167,46 +183,7 @@ namespace AmtlisBack.Services
                 });
             }
 
-            if (videos.Any())
-            {
-                var uniqueChannelIds = videos.Select(v => v.ChannelId).Distinct().Take(50).ToList();
-                var channelsString = string.Join(",", uniqueChannelIds);
-
-                var channelsUrl = $"https://www.googleapis.com/youtube/v3/channels?part=snippet&id={channelsString}&key={_apiKey}";
-                var channelsResponse = await _httpClient.GetAsync(channelsUrl);
-
-                if (channelsResponse.IsSuccessStatusCode)
-                {
-                    var channelsJson = await channelsResponse.Content.ReadAsStringAsync();
-                    using var channelsDoc = JsonDocument.Parse(channelsJson);
-
-                    if (channelsDoc.RootElement.TryGetProperty("items", out var channelItems))
-                    {
-                        var avatarDict = new Dictionary<string, string>();
-
-                        foreach (var cItem in channelItems.EnumerateArray())
-                        {
-                            var cId = cItem.GetProperty("id").GetString()!;
-                            var thumbnails = cItem.GetProperty("snippet").GetProperty("thumbnails");
-
-                            string avatar = thumbnails.TryGetProperty("default", out var def)
-                                ? def.GetProperty("url").GetString()!
-                                : "/ava.png";
-
-                            avatarDict[cId] = avatar;
-                        }
-
-                        foreach (var video in videos)
-                        {
-                            if (avatarDict.TryGetValue(video.ChannelId, out var avatar))
-                            {
-                                video.ChannelAvatarUrl = avatar;
-                            }
-                        }
-                    }
-                }
-            }
-
+            await AttachAvatarsAsync(videos);
             return new YouTubeResponse { Videos = videos };
         }
 
@@ -274,11 +251,14 @@ namespace AmtlisBack.Services
             var uploadsPlaylistId = item.GetProperty("contentDetails").GetProperty("relatedPlaylists").GetProperty("uploads").GetString()!;
 
             string bannerUrl = string.Empty;
+
             if (item.TryGetProperty("brandingSettings", out var branding) &&
-                branding.TryGetProperty("image", out var image) &&
-                image.TryGetProperty("bannerExternalUrl", out var bUrl))
+                branding.TryGetProperty("image", out var image))
             {
-                bannerUrl = bUrl.GetString() + "=w1920-fcrop64=1,00000000_ffffffff";
+                if (image.TryGetProperty("bannerExternalUrl", out var bUrlExt))
+                {
+                    bannerUrl = bUrlExt.GetString() ?? string.Empty;
+                }
             }
 
             return new ChannelDto
@@ -293,8 +273,6 @@ namespace AmtlisBack.Services
                 BannerUrl = bannerUrl
             };
         }
-
-
 
         public async Task<YouTubeResponse> GetVideosFromPlaylistAsync(string playlistId, int maxResults = 10)
         {
@@ -342,6 +320,7 @@ namespace AmtlisBack.Services
                 });
             }
 
+            await AttachAvatarsAsync(videos);
             return new YouTubeResponse { Videos = videos };
         }
 
@@ -459,6 +438,7 @@ namespace AmtlisBack.Services
                 }
             }
 
+            await AttachAvatarsAsync(videos);
             return new YouTubeResponse { Videos = videos, NextPageToken = nextToken };
         }
     }

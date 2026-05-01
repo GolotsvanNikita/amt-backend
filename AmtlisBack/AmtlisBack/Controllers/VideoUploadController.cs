@@ -1,11 +1,22 @@
 ﻿using AmtlisBack.Data;
 using AmtlisBack.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
 namespace AmtlisBack.Controllers
 {
+    public class VideoUploadRequest
+    {
+        public string? Type { get; set; }
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? Category { get; set; }
+        public IFormFile? File { get; set; }
+        public IFormFile? Thumbnail { get; set; }
+    }
+
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
@@ -21,38 +32,81 @@ namespace AmtlisBack.Controllers
         }
 
         [HttpPost("upload")]
-        public async Task<IActionResult> UploadVideo([FromForm] IFormFile file, [FromForm] string title)
+        [DisableRequestSizeLimit]
+        [RequestFormLimits(ValueLengthLimit = int.MaxValue, MultipartBodyLengthLimit = int.MaxValue)]
+        public async Task<IActionResult> UploadVideo([FromForm] VideoUploadRequest req)
         {
-            if (file == null || file.Length == 0)
-                return BadRequest("File is empty");
+            return await ProcessVideoUpload(req, isReel: false);
+        }
 
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null) return Unauthorized();
-            int userId = int.Parse(userIdClaim.Value);
+        [HttpPost("upload-reel")]
+        [DisableRequestSizeLimit]
+        [RequestFormLimits(ValueLengthLimit = int.MaxValue, MultipartBodyLengthLimit = int.MaxValue)]
+        public async Task<IActionResult> UploadReel([FromForm] VideoUploadRequest req)
+        {
+            return await ProcessVideoUpload(req, isReel: true);
+        }
 
-            string uploadsFolder = Path.Combine(_env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "uploads", "videos");
-            Directory.CreateDirectory(uploadsFolder);
-
-
-            string uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
-            string filePath = Path.Combine(uploadsFolder, uniqueFileName);
-
-            using (var fileStream = new FileStream(filePath, FileMode.Create))
+        private async Task<IActionResult> ProcessVideoUpload(VideoUploadRequest req, bool isReel)
+        {
+            try
             {
-                await file.CopyToAsync(fileStream);
+                if (req.File == null || req.File.Length == 0)
+                    return BadRequest(new { message = "Video file is empty or missing." });
+
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+                    return Unauthorized(new { message = "User not authorized." });
+
+                string webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+
+                string folderName = isReel ? "reels" : "videos";
+                string uploadsFolder = Path.Combine(webRoot, "uploads", folderName);
+                Directory.CreateDirectory(uploadsFolder);
+
+                string uniqueFileName = Guid.NewGuid().ToString() + Path.GetExtension(req.File.FileName);
+                string filePath = Path.Combine(uploadsFolder, uniqueFileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    await req.File.CopyToAsync(fileStream);
+                }
+
+                string thumbUrl = "/1v.png";
+                if (req.Thumbnail != null && req.Thumbnail.Length > 0)
+                {
+                    string thumbFolder = Path.Combine(webRoot, "uploads", "thumbnails");
+                    Directory.CreateDirectory(thumbFolder);
+                    string thumbName = Guid.NewGuid().ToString() + Path.GetExtension(req.Thumbnail.FileName);
+                    string thumbPath = Path.Combine(thumbFolder, thumbName);
+
+                    using (var stream = new FileStream(thumbPath, FileMode.Create))
+                    {
+                        await req.Thumbnail.CopyToAsync(stream);
+                    }
+                    thumbUrl = $"/uploads/thumbnails/{thumbName}";
+                }
+
+                var newVideo = new UploadedVideo
+                {
+                    Title = string.IsNullOrWhiteSpace(req.Title) ? (isReel ? "New Reel" : "New Video") : req.Title,
+                    Description = req.Description ?? "",
+                    Category = req.Category ?? "",
+                    VideoUrl = $"/uploads/{folderName}/{uniqueFileName}",
+                    ThumbnailUrl = thumbUrl,
+                    UserId = userId,
+                    IsReel = isReel
+                };
+
+                _context.UploadedVideos.Add(newVideo);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Upload successful", videoUrl = newVideo.VideoUrl });
             }
-
-            var newVideo = new UploadedVideo
+            catch (Exception ex)
             {
-                Title = title,
-                VideoUrl = $"/uploads/videos/{uniqueFileName}",
-                UserId = userId
-            };
-
-            _context.UploadedVideos.Add(newVideo);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Upload successful", videoUrl = newVideo.VideoUrl });
+                return StatusCode(500, new { message = $"Server Error: {ex.InnerException?.Message ?? ex.Message}" });
+            }
         }
     }
 }
